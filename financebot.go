@@ -7,6 +7,8 @@ import (
   "os/signal"
   "syscall"
   "strings"
+  "golang.org/x/net/html"
+  "net/http"
 
   "github.com/bwmarrin/discordgo"
 )
@@ -27,6 +29,8 @@ func main() {
   }
 
 
+  initCalendar()
+
   // Create a new Discord session using the provided bot token.
   fmt.Println("Starting discord session")
   dg, err := discordgo.New("Bot " + token)
@@ -46,7 +50,7 @@ func main() {
   }
 
   // Wait here until CTRL-C or other term signal is received.
-  fmt.Println("Finance bot is now running.  Meep!  Press CTRL-C to exit.")
+  fmt.Println("Finance bot is now running.  Press CTRL-C to exit.")
   sc := make(chan os.Signal, 1)
   signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
   <-sc
@@ -75,3 +79,175 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
   }
 }
+
+//Read the calendar.
+func initCalendar() {
+  curDate, curTime := "", ""
+
+  fmt.Println("Grabbing data from forexfactory")
+  resp, _ := http.Get("https://www.forexfactory.com/calendar.php")
+
+  z := html.NewTokenizer(resp.Body)
+
+  for {
+    tt := z.Next()
+
+    switch {
+      case tt == html.ErrorToken:
+        // End of the document, we're done
+	return
+      case tt == html.StartTagToken:
+        t := z.Token()
+
+        isRow := t.Data == "tr"
+        if isRow {
+
+          ok, classname := getClass(t)
+          if !ok {
+            continue
+          }
+          if classname != "calendar__row calendar__expand calendar__row--alt" && classname != "calendar__row calendar__expand" {
+            ok, eventId := getEventId(t)
+            if ok {
+              date, time, event, forecast, previous := parseRow(z)
+              if date != "" {
+                curDate = date
+              }
+              if time != "" {
+                curTime = time
+              }
+
+              fmt.Printf("Id: %v Date: %v Time: %v Name: %v Forcast: %v Previous: %v \n", eventId, curDate, curTime, event, forecast, previous)
+            }
+          }
+
+          continue
+        }
+    }
+  }
+}
+
+func parseRow(z *html.Tokenizer)(date string, time string, event string, forecast string, previous string){
+  date, time, event, forecast, previous = "", "", "", "", ""
+  for {
+    tt := z.Next()
+
+    switch {
+      case tt == html.ErrorToken:
+        // End of the document, we're done
+        return
+      case tt == html.StartTagToken:
+        t := z.Token()
+
+        isCell := t.Data == "td"
+        if isCell {
+          ok, classname := getClass(t)
+          if !ok {
+            continue
+          }
+
+          if classname == "calendar__cell calendar__date date" {
+            //fmt.Printf("Found date: %v \n", 0)
+            ok, tmp := getText(z)
+            if ok {
+              date = tmp
+            }
+            continue
+          }
+
+          if classname == "calendar__cell calendar__time time" {
+            ok, tmp := getText(z)
+            if ok {
+              time = tmp
+            }
+            continue
+          }
+
+          if classname == "calendar__cell calendar__event event" {
+            ok, tmp := getText(z)
+            if ok {
+              event = tmp
+            }
+            continue
+          }
+
+          if classname == "calendar__cell calendar__forecast forecast" {
+            ok, tmp := getText(z)
+            if ok {
+              forecast = tmp
+            }
+            continue
+          }
+
+          if classname == "calendar__cell calendar__previous previous" {
+            ok, tmp := getText(z)
+            if ok {
+              previous = tmp
+            }
+            continue
+          }
+        }
+
+      case tt == html.EndTagToken:
+        t := z.Token()
+
+        isRow := t.Data == "tr"
+        if isRow {
+          return
+        }
+    }
+  }
+}
+
+func getText(z *html.Tokenizer)(ok bool, val string) {
+  val = ""
+  for {
+    tt := z.Next()
+
+    switch {
+      case tt == html.TextToken:
+        t := z.Token()
+        val += t.Data + " "
+
+     case tt == html.EndTagToken:
+        t := z.Token()
+
+        isEndOfCell := t.Data == "td"
+        if isEndOfCell {
+          if val != "" {
+            ok = true
+          }
+          val = strings.TrimSpace(val)
+          return
+        }
+
+    }
+  }
+}
+
+
+func getClass(t html.Token) (ok bool, href string) {
+  // Iterate over all of the Token's attributes until we find an "href"
+  for _, a := range t.Attr {
+    if a.Key == "class" {
+      href = a.Val
+      ok = true
+    }
+  }
+
+  // "bare" return will return the variables (ok, href) as defined in
+  // the function definition
+  return
+}
+
+func getEventId(t html.Token) (ok bool, val string) {
+  for _, a := range t.Attr {
+    if a.Key == "data-eventid" {
+      val = a.Val
+      ok = true
+    }
+  }
+
+  return
+}
+
