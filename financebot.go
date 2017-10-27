@@ -29,8 +29,10 @@ func main() {
     return
   }
 
-
-  initCalendar()
+  newsQueue := initCalendar()
+  for _, item := range newsQueue {
+    fmt.Printf("Id: %v Date: %v Name: %v Forecast: %v Previous: %v \n", item.eventId, item.date, item.event, item.forecast, item.previous)
+  }
 
   // Create a new Discord session using the provided bot token.
   fmt.Println("Starting discord session")
@@ -82,8 +84,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 //Read the calendar.
-func initCalendar() {
+func initCalendar() []*NewsEvent {
   curDate, curTime := "", ""
+
+  newsQueue := make([]*NewsEvent, 0)
 
   fmt.Println("Grabbing data from forexfactory")
   resp, _ := http.Get("https://www.forexfactory.com/calendar.php")
@@ -96,7 +100,7 @@ func initCalendar() {
     switch {
       case tt == html.ErrorToken:
         // End of the document, we're done
-	return
+	return newsQueue
       case tt == html.StartTagToken:
         t := z.Token()
 
@@ -122,8 +126,7 @@ func initCalendar() {
               const longForm = "Mon Jan 2 3:04pm MST 2006"
               dt, _ := time.Parse(longForm, curDate + " " + curTime + " EST 2017")
               item := NewsEvent{eventId: eventId, date: dt, event: event, forecast: forecast, previous: previous }
-
-              fmt.Printf("Id: %v Date: %v Name: %v Forecast: %v Previous: %v \n", item.eventId, item.date, item.event, item.forecast, item.previous)
+              newsQueue = append(newsQueue, &item)
             }
           }
 
