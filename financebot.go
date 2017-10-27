@@ -9,6 +9,7 @@ import (
   "strings"
   "golang.org/x/net/html"
   "net/http"
+  "time"
 
   "github.com/bwmarrin/discordgo"
 )
@@ -109,15 +110,20 @@ func initCalendar() {
           if classname != "calendar__row calendar__expand calendar__row--alt" && classname != "calendar__row calendar__expand" {
             ok, eventId := getEventId(t)
             if ok {
-              date, time, event, forecast, previous := parseRow(z)
-              if date != "" {
-                curDate = date
+              mydate, mytime, event, forecast, previous := parseRow(z)
+              if mydate != "" {
+                curDate = mydate
               }
-              if time != "" {
-                curTime = time
+              if mytime != "" {
+                curTime = mytime
               }
 
-              fmt.Printf("Id: %v Date: %v Time: %v Name: %v Forcast: %v Previous: %v \n", eventId, curDate, curTime, event, forecast, previous)
+              //Create struct
+              const longForm = "Mon Jan 2 3:04pm MST 2006"
+              dt, _ := time.Parse(longForm, curDate + " " + curTime + " EST 2017")
+              item := NewsEvent{eventId: eventId, date: dt, event: event, forecast: forecast, previous: previous }
+
+              fmt.Printf("Id: %v Date: %v Name: %v Forecast: %v Previous: %v \n", item.eventId, item.date, item.event, item.forecast, item.previous)
             }
           }
 
@@ -249,5 +255,13 @@ func getEventId(t html.Token) (ok bool, val string) {
   }
 
   return
+}
+
+type NewsEvent struct {
+  eventId string
+  date time.Time
+  event string
+  forecast string
+  previous string
 }
 
